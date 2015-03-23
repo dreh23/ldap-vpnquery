@@ -12,6 +12,6 @@ This is a tool to query a Samba 4 Active Directory Server. We use it to see if c
     userAccountControl: 514 (user disabled)
 
 
-You need to install [http://golang.org/](go) and build the program. Once it's compiled use:
+You need to install go and build the program. Once it's compiled use:
 
     vpnquery --help 
