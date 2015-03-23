@@ -37,7 +37,7 @@ userAccountControl: 514 (user disabled)
 
 /*
 TODO:
-	- do connections tls encrypted
+    - do connections tls encrypted
 */
 
 package main
@@ -85,11 +85,11 @@ var (
 
 func init() {
 	flag.StringVar(&user, "user", "testuser", "Username to query")
-	flag.StringVar(&ldapserverlist, "ldaphosts", "cell-dc-04,cell-dc-03", "List of Ldap servers. If the first one doesn't answer ...")
+	flag.StringVar(&ldapserverlist, "ldaphosts", "Server1,Server2", "List of Ldap servers. If the first one doesn't answer ...")
 	flag.StringVar(&ldapport, "ldapport", "389", "Ldap Server PORT")
-	flag.StringVar(&queryuser, "ldapuser", "cn=cellquery,cn=Users,dc=celluloidvfx,dc=inc", "User for authentification")
-	flag.StringVar(&passwd, "ldappasswd", "cellquery123", "Password for authentification")
-	flag.StringVar(&basedn, "ldapbase", "cn=Users,dc=celluloidvfx,dc=inc", "base DN for search")
+	flag.StringVar(&queryuser, "ldapuser", "cn=cellquery,cn=Users,dc=domain,dc=inc", "User for authentification")
+	flag.StringVar(&passwd, "ldappasswd", "XXX", "Password for authentification")
+	flag.StringVar(&basedn, "ldapbase", "cn=Users,dc=domain,dc=inc", "base DN for search")
 	flag.BoolVar(&rawoutput, "raw", false, "Switch for displaying raw output")
 }
 
@@ -131,6 +131,7 @@ func main() {
 		l, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", ldapserver, port))
 		if err != nil {
 			log.Printf("WARNING: Host \""+ldapserver+"\" is not answering: %s\n", err.Error())
+			defer l.Close()
 		} else {
 			// l.Debug = true
 
