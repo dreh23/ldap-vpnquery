@@ -49,11 +49,18 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
-const AppVersion = "0.0.1"
+const AppVersion = "0.0.2"
 
 /*
+
+---------------------------------
+Version 0.0.2 20150323
+
+Added a feature: Now we can have a list as servers. We iterates over this list until it gets an answer. -- JA
+
 ---------------------------------
 Version 0.0.1 20141219
 
@@ -62,22 +69,23 @@ Init version -- JA
 */
 
 var (
-	ldapserver string
-	ldapport   string
-	basedn     string
-	Attributes []string = []string{"msNPAllowDialin", "userAccountControl"}
-	queryuser  string
-	passwd     string
-	user       string
-	filter     string
-	rawoutput  bool
-	account    string
-	vpn        string
+	ldapserverlist string
+	serverlist     []string
+	ldapport       string
+	basedn         string
+	Attributes     []string = []string{"msNPAllowDialin", "userAccountControl"}
+	queryuser      string
+	passwd         string
+	user           string
+	filter         string
+	rawoutput      bool
+	account        string
+	vpn            string
 )
 
 func init() {
 	flag.StringVar(&user, "user", "testuser", "Username to query")
-	flag.StringVar(&ldapserver, "ldaphost", "cell-dc-03", "Ldap server URL")
+	flag.StringVar(&ldapserverlist, "ldaphosts", "cell-dc-04,cell-dc-03", "List of Ldap servers. If the first one doesn't answer ...")
 	flag.StringVar(&ldapport, "ldapport", "389", "Ldap Server PORT")
 	flag.StringVar(&queryuser, "ldapuser", "cn=cellquery,cn=Users,dc=celluloidvfx,dc=inc", "User for authentification")
 	flag.StringVar(&passwd, "ldappasswd", "cellquery123", "Password for authentification")
@@ -91,7 +99,6 @@ func main() {
 	license := flag.Bool("license", false, "dumps the license and exits")
 
 	greeter := "VPN Query " + AppVersion + " Copyright 2014 Celluloid VFX, Berlin and Johannes Amorosa"
-
 	flag.Parse()
 
 	if *version {
@@ -110,65 +117,79 @@ func main() {
 	// Need portnumber as int
 	port, _ := strconv.Atoi(ldapport)
 
-	// Dial
-	l, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", ldapserver, port))
-	if err != nil {
-		log.Fatalf("ERROR: %s\n", err.Error())
-		os.Exit(2)
-	}
-	defer l.Close()
-	// l.Debug = true
+	// ldapserverlist will be mapped into serverlist[]
+	serverlist = strings.Split(ldapserverlist, ",")
 
-	// Bind
-	err = l.Bind(queryuser, passwd)
-	if err != nil {
-		log.Printf("ERROR: Cannot bind: %s\n", err.Error())
-		os.Exit(2)
-	}
-	// Set filter to user
-	filter := "(cn=" + user + ")"
+	// iterating over the servers. We break if the first machine answers and return true
+	// else skip to next one
 
-	// Build Search
-	search := ldap.NewSearchRequest(
-		basedn,
-		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-		filter,
-		Attributes,
-		nil)
+	for _, ldapserver := range serverlist {
 
-	// Do search
-	sr, err := l.Search(search)
+		log.Printf("Trying Server \"" + ldapserver + "\" ...\n")
 
-	if err != nil {
-		log.Fatalf("ERROR: %s\n", err.Error())
-		os.Exit(2)
-	}
-	if len(sr.Entries) > 0 {
-		// This display a "raw" output for debugging
-		if rawoutput {
-			log.Printf("Search: %s -> num of entries = %d\n", search.Filter, len(sr.Entries))
-			sr.PrettyPrint(0)
-			os.Exit(2)
-		}
-
-		// Renice data
-		account = sr.Entries[0].GetAttributeValue("userAccountControl")
-		vpn = sr.Entries[0].GetAttributeValue("msNPAllowDialin")
-
-		// String compare
-		if account == "512" && vpn == "TRUE" {
-			log.Printf("VPN access for user " + user + " allowed")
-			os.Exit(0)
+		// Dial
+		l, err := ldap.Dial("tcp", fmt.Sprintf("%s:%d", ldapserver, port))
+		if err != nil {
+			log.Printf("WARNING: Host \""+ldapserver+"\" is not answering: %s\n", err.Error())
 		} else {
-			log.Printf("VPN access for user " + user + " declined")
-			os.Exit(1)
-		}
+			// l.Debug = true
 
-	} else {
-		// User doesn't exist or something funky happend
-		log.Printf("VPN access for user " + user + " declined")
-		os.Exit(2)
+			// Bind
+			err = l.Bind(queryuser, passwd)
+			if err != nil {
+				log.Printf("ERROR: Cannot bind: %s\n", err.Error())
+				os.Exit(2)
+			}
+			// Set filter to user
+			filter := "(cn=" + user + ")"
+
+			// Build Search
+			search := ldap.NewSearchRequest(
+				basedn,
+				ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+				filter,
+				Attributes,
+				nil)
+
+			// Do search
+			sr, err := l.Search(search)
+
+			if err != nil {
+				log.Fatalf("ERROR: %s\n", err.Error())
+				os.Exit(2)
+			}
+			if len(sr.Entries) > 0 {
+				// This display a "raw" output for debugging
+				if rawoutput {
+					log.Printf("Search: %s -> num of entries = %d\n", search.Filter, len(sr.Entries))
+					sr.PrettyPrint(0)
+					os.Exit(2)
+				}
+
+				// Renice data
+				account = sr.Entries[0].GetAttributeValue("userAccountControl")
+				vpn = sr.Entries[0].GetAttributeValue("msNPAllowDialin")
+
+				// String compare
+				if account == "512" && vpn == "TRUE" {
+					log.Printf("VPN access for user " + user + " allowed")
+					os.Exit(0)
+				} else {
+					log.Printf("VPN access for user " + user + " declined")
+					os.Exit(1)
+				}
+
+			} else {
+				// User doesn't exist or something funky happend
+				log.Printf("VPN access for user " + user + " declined")
+				os.Exit(2)
+			}
+		}
+		//defer l.Close()
+
 	}
+	log.Printf("No Authentication server available")
+	os.Exit(2)
 }
 
 func printLicenseText() {
